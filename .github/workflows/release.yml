@@ -1,0 +1,65 @@
+name: Publish preview release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release.yml
+
+concurrency:
+  group: publish-preview-v2.0.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: macos-15
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: v2.0.0
+      LIDAWAKE_SKIP_SYSTEM_POWER_TEST: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Preserve an existing published release
+        id: existing
+        shell: bash
+        run: |
+          if gh release view "$TAG" --json isDraft > "$RUNNER_TEMP/lid-awake-release.json"; then
+            DRAFT=$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1]))["isDraft"]).lower())' "$RUNNER_TEMP/lid-awake-release.json")
+            if [ "$DRAFT" = false ]; then
+              printf 'published=true\n' >> "$GITHUB_OUTPUT"
+              printf 'Existing published release is preserved.\n'
+            fi
+          fi
+      - name: Run tests
+        if: steps.existing.outputs.published != 'true'
+        run: ./test.sh
+      - name: Build app and installer packages
+        if: steps.existing.outputs.published != 'true'
+        run: ./package.sh "$GITHUB_WORKSPACE/dist"
+      - name: Generate download checksums
+        if: steps.existing.outputs.published != 'true'
+        working-directory: dist
+        run: shasum -a 256 *.pkg *.dmg *.zip > SHA256SUMS.txt
+      - name: Upload to a draft, then publish the preview
+        if: steps.existing.outputs.published != 'true'
+        shell: bash
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title 'Lid Awake 2.0 · 首个开源预览版' \
+              --notes-file docs/releases/v2.0.0.md \
+              --draft --prerelease
+          fi
+          gh release upload "$TAG" dist/*.pkg dist/*.dmg dist/*.zip dist/SHA256SUMS.txt --clobber
+          gh release edit "$TAG" --draft=false --prerelease
+      - name: Show download page
+        shell: bash
+        run: gh release view "$TAG" --json url --jq .url
