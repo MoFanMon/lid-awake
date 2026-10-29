@@ -43,6 +43,12 @@ jobs:
       - name: Build app and installer packages
         if: steps.existing.outputs.published != 'true'
         run: ./package.sh "$GITHUB_WORKSPACE/dist"
+      - name: Use portable download names
+        if: steps.existing.outputs.published != 'true'
+        run: |
+          mv dist/合盖不眠-2.0.pkg dist/LidAwake-2.0-universal.pkg
+          mv dist/合盖不眠-2.0.dmg dist/LidAwake-2.0-universal.dmg
+          mv dist/合盖不眠-2.0-应用.zip dist/LidAwake-2.0-universal.zip
       - name: Generate download checksums
         if: steps.existing.outputs.published != 'true'
         working-directory: dist
@@ -60,6 +66,41 @@ jobs:
           fi
           gh release upload "$TAG" dist/*.pkg dist/*.dmg dist/*.zip dist/SHA256SUMS.txt --clobber
           gh release edit "$TAG" --draft=false --prerelease
+      - name: Normalize legacy download names without replacing binaries
+        shell: bash
+        run: |
+          gh api "repos/$GH_REPO/releases/tags/$TAG" > "$RUNNER_TEMP/lid-awake-assets.json"
+          python3 - <<'PYTHON'
+          import json, os, subprocess
+          release = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "lid-awake-assets.json")))
+          names = {
+              "-2.0.pkg": "LidAwake-2.0-universal.pkg",
+              "-2.0.dmg": "LidAwake-2.0-universal.dmg",
+              "-2.0-.zip": "LidAwake-2.0-universal.zip",
+          }
+          existing = {a["name"] for a in release["assets"]}
+          for asset in release["assets"]:
+              if asset["name"] in names:
+                  name = names[asset["name"]]
+                  if name in existing:
+                      raise RuntimeError("Refusing to replace an existing binary: " + name)
+                  path = "repos/" + os.environ["GH_REPO"] + "/releases/assets/" + str(asset["id"])
+                  subprocess.run(["gh", "api", "--method", "PATCH", path, "-f", "name=" + name], check=True, stdout=subprocess.DEVNULL)
+                  print("Renamed download: " + name)
+          PYTHON
+      - name: Verify published downloads and align checksum filenames
+        shell: bash
+        run: |
+          CHECK_DIR="$RUNNER_TEMP/lid-awake-download-check"
+          mkdir -p "$CHECK_DIR/previous"
+          gh release download "$TAG" --pattern 'LidAwake-2.0-universal.*' --dir "$CHECK_DIR"
+          gh release download "$TAG" --pattern SHA256SUMS.txt --dir "$CHECK_DIR/previous"
+          cd "$CHECK_DIR"
+          shasum -a 256 LidAwake-2.0-universal.pkg LidAwake-2.0-universal.dmg LidAwake-2.0-universal.zip > SHA256SUMS.txt
+          shasum -a 256 -c SHA256SUMS.txt
+          if ! cmp -s SHA256SUMS.txt previous/SHA256SUMS.txt; then
+            gh release upload "$TAG" SHA256SUMS.txt --clobber
+          fi
       - name: Show download page
         shell: bash
         run: gh release view "$TAG" --json url --jq .url
