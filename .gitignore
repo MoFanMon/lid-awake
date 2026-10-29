@@ -1,0 +1,25 @@
+# Build outputs
+.build/
+dist/
+*.app/
+*.dmg
+*.pkg
+*.zip
+
+# macOS and editors
+.DS_Store
+._*
+.idea/
+.vscode/
+*.swp
+
+# Local credentials and code-signing material
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.key
+*.pem
+*.mobileprovision
+*.provisionprofile

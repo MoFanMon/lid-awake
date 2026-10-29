@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+[ "${3:-/}" = / ] || { echo '请安装到当前启动磁盘。' >&2; exit 1; }
+exec /bin/sh '/Applications/合盖不眠.app/Contents/Resources/install-service.sh' '/Applications/合盖不眠.app'

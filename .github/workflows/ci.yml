@@ -1,0 +1,45 @@
+name: macOS checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      LIDAWAKE_SKIP_SYSTEM_POWER_TEST: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Test without changing system power settings
+        run: ./test.sh
+      - name: Check installer scripts
+        run: |
+          /bin/sh -n Installer/install-service.sh
+          /bin/sh -n Installer/uninstall-service.sh
+          /bin/sh -n Installer/Scripts/postinstall
+          plutil -lint Info.plist Installer/local.lidawake.helper.plist
+      - name: Build universal app
+        run: ./build.sh "$RUNNER_TEMP/lid-awake-build"
+      - name: Verify and archive
+        run: |
+          codesign --verify --deep --strict --all-architectures "$RUNNER_TEMP/lid-awake-build/合盖不眠.app"
+          ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/lid-awake-build/合盖不眠.app" "$RUNNER_TEMP/LidAwake-universal.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: LidAwake-universal-preview
+          path: ${{ runner.temp }}/LidAwake-universal.zip
+          if-no-files-found: error
+          retention-days: 7

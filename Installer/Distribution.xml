@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>合盖不眠 2.0</title>
+  <welcome file="Welcome.html"/>
+  <readme file="ReadMe.html"/>
+  <conclusion file="Conclusion.html"/>
+  <options customize="never" hostArchitectures="arm64,x86_64" rootVolumeOnly="true"/>
+  <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+  <installation-check script="checkSystem()"/>
+  <script><![CDATA[
+    function checkSystem() {
+      if (system.compareVersions(system.version.ProductVersion, '13.0') < 0) {
+        my.result.type = 'Fatal'; my.result.message = '合盖不眠需要 macOS 13 或更新版本。'; return false;
+      }
+      return true;
+    }
+  ]]></script>
+  <choices-outline><line choice="main"/></choices-outline>
+  <choice id="main" visible="false" title="合盖不眠"><pkg-ref id="local.lidawake.installer"/></choice>
+  <pkg-ref id="local.lidawake.installer" version="2.0" onConclusion="none">LidAwake-component.pkg</pkg-ref>
+</installer-gui-script>
